@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>QAHub UI</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 12px; }
+        .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        input, button, select { padding: 8px 10px; }
+        .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; margin-top: 14px; }
+        .muted { color: #666; }
+        .ok { color: #0a7; }
+        .err { color: #c22; }
+        ul { padding-left: 18px; }
+    </style>
+</head>
+<body>
+<h1>QAHub UI</h1>
+<p class="muted">Stable UI for automation practice (Auth + Tasks via Directus).</p>
+
+<div class="card">
+    <h2>Login</h2>
+    <div class="row">
+        <input id="email" placeholder="email" value="admin@example.com" />
+        <input id="password" placeholder="password" type="password" value="Admin12345!" />
+        <button id="loginBtn">Login</button>
+        <span id="loginStatus" class="muted"></span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Tasks</h2>
+    <div class="row">
+        <input id="title" placeholder="Task title" />
+        <select id="status">
+            <option value="todo">todo</option>
+            <option value="doing">doing</option>
+            <option value="done">done</option>
+        </select>
+        <button id="createBtn">Create</button>
+        <button id="refreshBtn">Refresh</button>
+        <span id="taskStatus" class="muted"></span>
+    </div>
+    <ul id="tasks"></ul>
+</div>
+
+<script>
+    const API_BASE = "http://localhost:8055";
+    let token = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    async function ensureSchema() {
+        const headers = { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" };
+
+        const collectionsRes = await fetch(`${API_BASE}/collections`, { headers });
+        const collectionsJson = await collectionsRes.json();
+        const exists = (collectionsJson?.data || []).some(c => c.collection === "tasks");
+        if (exists) return;
+
+        await fetch(`${API_BASE}/collections`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                collection: "tasks",
+                meta: { icon: "task_alt", note: "QAHub tasks for automation demo" },
+                schema: { name: "tasks" }
+            })
+        });
+
+        const fields = [
+            { field: "title", type: "string", meta: { required: true } },
+            { field: "status", type: "string", meta: { required: true } }
+        ];
+
+        for (const f of fields) {
+            await fetch(`${API_BASE}/fields/tasks`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(f)
+            });
+        }
+    }
+
+    async function login() {
+        $("loginStatus").textContent = "Logging in...";
+        $("loginStatus").className = "muted";
+
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: $("email").value, password: $("password").value })
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            $("loginStatus").textContent = `Login failed: ${json?.errors?.[0]?.message || res.status}`;
+            $("loginStatus").className = "err";
+            return;
+        }
+
+        token = json.data.access_token;
+        $("loginStatus").textContent = "Login OK";
+        $("loginStatus").className = "ok";
+
+        await ensureSchema();
+        await refresh();
+    }
+
+    async function refresh() {
+        $("taskStatus").textContent = "Loading...";
+        $("taskStatus").className = "muted";
+
+        const res = await fetch(`${API_BASE}/items/tasks?sort=-id&limit=25`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            $("taskStatus").textContent = `Load failed: ${json?.errors?.[0]?.message || res.status}`;
+            $("taskStatus").className = "err";
+            return;
+        }
+
+        $("tasks").innerHTML = "";
+        (json.data || []).forEach(t => {
+            const li = document.createElement("li");
+            li.innerHTML = `<b class="task-title">${t.title}</b> — <span class="task-status">${t.status}</span> <span class="muted">(id=${t.id})</span>`;
+            $("tasks").appendChild(li);
+        });
+
+        $("taskStatus").textContent = `Loaded ${json.data?.length || 0}`;
+        $("taskStatus").className = "ok";
+    }
+
+    async function createTask() {
+        $("taskStatus").textContent = "Creating...";
+        $("taskStatus").className = "muted";
+
+        const payload = { title: $("title").value, status: $("status").value };
+
+        const res = await fetch(`${API_BASE}/items/tasks`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            $("taskStatus").textContent = `Create failed: ${json?.errors?.[0]?.message || res.status}`;
+            $("taskStatus").className = "err";
+            return;
+        }
+
+        $("taskStatus").textContent = "Created";
+        $("taskStatus").className = "ok";
+        $("title").value = "";
+        await refresh();
+    }
+
+    $("loginBtn").addEventListener("click", login);
+    $("refreshBtn").addEventListener("click", refresh);
+    $("createBtn").addEventListener("click", createTask);
+</script>
+</body>
+</html>
