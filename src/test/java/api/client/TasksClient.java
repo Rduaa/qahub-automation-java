@@ -1,48 +1,56 @@
 package api.client;
 
-import api.model.TaskDto;
-import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import io.restassured.response.Response;
 
 import static io.restassured.RestAssured.given;
 
 public class TasksClient {
 
+    private final String baseUrl;
+
+    // If your UI works with "/server/tasks", keep it as is.
+    private static final String TASKS_PATH = "/server/tasks";
+
     public TasksClient(String baseUrl) {
-        RestAssured.baseURI = baseUrl;
+        this.baseUrl = baseUrl;
     }
 
-    public TaskDto createTask(String accessToken, String title, String status) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("title", title);
-        body.put("status", status);
+    /**
+     * Creates a task via backend API and returns the raw response.
+     */
+    public Response createTaskRaw(String accessToken, String title, String status) {
+        String body = String.format("{\"title\":\"%s\",\"status\":\"%s\"}", escapeJson(title), escapeJson(status));
 
         return given()
+                .baseUri(baseUrl)
                 .contentType(ContentType.JSON)
-                .auth().oauth2(accessToken)
+                .accept(ContentType.JSON)
+                .header("Authorization", "Bearer " + accessToken)
                 .body(body)
                 .when()
-                .post("/items/tasks")
+                .post(TASKS_PATH)
                 .then()
-                .statusCode(200)
                 .extract()
-                .jsonPath()
-                .getObject("data", TaskDto.class);
+                .response();
     }
 
-    public List<TaskDto> getTasks(String accessToken) {
+    /**
+     * Gets tasks list via backend API and returns the raw response.
+     */
+    public Response getTasksRaw(String accessToken) {
         return given()
-                .auth().oauth2(accessToken)
+                .baseUri(baseUrl)
+                .accept(ContentType.JSON)
+                .header("Authorization", "Bearer " + accessToken)
                 .when()
-                .get("/items/tasks?sort=-id&limit=50")
+                .get(TASKS_PATH)
                 .then()
-                .statusCode(200)
                 .extract()
-                .jsonPath()
-                .getList("data", TaskDto.class);
+                .response();
+    }
+
+    private String escapeJson(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

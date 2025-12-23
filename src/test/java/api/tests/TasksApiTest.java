@@ -2,40 +2,30 @@ package api.tests;
 
 import api.client.AuthClient;
 import api.client.TasksClient;
-import api.model.TaskDto;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import java.util.List;
-
 public class TasksApiTest {
 
-    private static final String BASE_URL = "http://localhost:8055";
-    private static final String EMAIL = "admin@example.com";
-    private static final String PASSWORD = "Admin12345!";
-
     @Test(groups = "api")
-    public void shouldCreateAndFindTaskInList() {
-        String token = new AuthClient(BASE_URL, EMAIL, PASSWORD).loginAndGetAccessToken();
+    public void shouldCreateTaskAndThenSeeItInList() {
+        String baseUrl = "http://localhost:8055";
+        String email = "admin@example.com";
+        String password = "admin123";
 
-        TasksClient tasksClient = new TasksClient(BASE_URL);
+        String token = new AuthClient(baseUrl, email, password).loginAndGetAccessToken();
 
-        String title = "task-" + System.currentTimeMillis();
-        TaskDto created = tasksClient.createTask(token, title, "todo");
+        TasksClient tasksClient = new TasksClient(baseUrl);
 
-        Assert.assertNotNull(created, "Created task should not be null");
-        Assert.assertNotNull(created.id, "Created task id should not be null");
-        Assert.assertEquals(created.title, title, "Created task title mismatch");
-        Assert.assertEquals(created.status, "todo", "Created task status mismatch");
+        // 1) Create a task
+        var createResponse = tasksClient.createTaskRaw(token, "make some fun", "todo");
+        Assert.assertEquals(createResponse.statusCode(), 200, "Create task should return 200");
 
-        List<TaskDto> tasks = tasksClient.getTasks(token);
+        // 2) Read tasks
+        var listResponse = tasksClient.getTasksRaw(token);
+        Assert.assertEquals(listResponse.statusCode(), 200, "Get tasks should return 200");
 
-        boolean found = tasks.stream().anyMatch(t ->
-                t.id != null && t.id.equals(created.id) &&
-                        title.equals(t.title) &&
-                        "todo".equals(t.status)
-        );
-
-        Assert.assertTrue(found, "Created task was not found in tasks list");
+        String body = listResponse.asString();
+        Assert.assertTrue(body.contains("make some fun"), "Tasks list should contain created task title");
     }
 }

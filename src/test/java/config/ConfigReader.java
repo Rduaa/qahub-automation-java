@@ -1,0 +1,34 @@
+package config;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
+public final class ConfigReader {
+
+    private static final String CONFIG_FILE = "config.properties";
+    private static final Properties PROPS = new Properties();
+
+    static {
+        try (InputStream is = ConfigReader.class.getClassLoader().getResourceAsStream(CONFIG_FILE)) {
+            if (is == null) {
+                throw new IllegalStateException("Config file not found: " + CONFIG_FILE);
+            }
+            PROPS.load(is);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to load config file: " + CONFIG_FILE, e);
+        }
+    }
+
+    private ConfigReader() {
+        // Utility class
+    }
+
+    public static String get(String key) {
+        String value = PROPS.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("Missing config property: " + key);
+        }
+        return value.trim();
+    }
+}
