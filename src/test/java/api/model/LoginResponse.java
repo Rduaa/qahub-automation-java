@@ -1,15 +1,34 @@
 package api.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LoginResponse {
-    public Data data;
+
+    @JsonProperty("data")
+    private Data data;
+
+    public Data getData() {
+        return data;
+    }
+
+    public void setData(Data data) {
+        this.data = data;
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Data {
-        public String access_token;
-        public String refresh_token;
-        public long expires;
+
+        @JsonProperty("access_token")
+        private String accessToken;
+
+        public String getAccessToken() {
+            return accessToken;
+        }
+
+        public void setAccessToken(String accessToken) {
+            this.accessToken = accessToken;
+        }
     }
 }

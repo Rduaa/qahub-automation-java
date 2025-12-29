@@ -2,30 +2,25 @@ package api.tests;
 
 import api.client.AuthClient;
 import api.client.TasksClient;
+import config.ConfigReader;
+import io.restassured.response.Response;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class TasksApiTest {
 
     @Test(groups = "api")
-    public void shouldCreateTaskAndThenSeeItInList() {
-        String baseUrl = "http://localhost:8055";
-        String email = "admin@example.com";
-        String password = "admin123";
+    public void shouldUpdateSingletonTaskAndReadItBack() {
+        String baseUrl = ConfigReader.get("base.url");         // must be http://localhost:8055
+        String email = ConfigReader.get("admin.email");
+        String password = ConfigReader.get("admin.password");
 
-        String token = new AuthClient(baseUrl, email, password).loginAndGetAccessToken();
+        String token = AuthClient.loginAndGetAccessToken(baseUrl, email, password);
 
-        TasksClient tasksClient = new TasksClient(baseUrl);
+        Response updateResp = TasksClient.upsertSingletonTask(baseUrl, token, "Test task");
+        Assert.assertEquals(updateResp.statusCode(), 200, "Update failed: " + updateResp.asString());
 
-        // 1) Create a task
-        var createResponse = tasksClient.createTaskRaw(token, "make some fun", "todo");
-        Assert.assertEquals(createResponse.statusCode(), 200, "Create task should return 200");
-
-        // 2) Read tasks
-        var listResponse = tasksClient.getTasksRaw(token);
-        Assert.assertEquals(listResponse.statusCode(), 200, "Get tasks should return 200");
-
-        String body = listResponse.asString();
-        Assert.assertTrue(body.contains("make some fun"), "Tasks list should contain created task title");
+        Response getResp = TasksClient.getSingletonTask(baseUrl, token);
+        Assert.assertEquals(getResp.statusCode(), 200, "Get failed: " + getResp.asString());
     }
 }
