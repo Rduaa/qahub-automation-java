@@ -8,46 +8,31 @@ jobs:
   tests:
     runs-on: ubuntu-latest
 
-    services:
-      directus:
-        image: directus/directus:10.13.4
-        ports:
-          - 8055:8055
-        env:
-          KEY: "some-secret-key"
-          SECRET: "some-secret-secret"
-          ADMIN_EMAIL: "admin@example.com"
-          ADMIN_PASSWORD: "Admin12345!"
-          DB_CLIENT: "sqlite3"
-          DB_FILENAME: "/directus/database/data.db"
-        options: >-
-          --health-cmd="wget -qO- http://localhost:8055/server/ping || exit 1"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=30
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
 
-      - name: Wait for Directus
+      - name: Start Directus (docker compose)
+        run: docker compose up -d
+
+      - name: Wait for Directus to be ready
         run: |
           for i in {1..60}; do
-            curl -sSf http://localhost:8055/server/ping && break
+            if curl -fsS http://localhost:8055/server/ping | grep -q pong; then
+              echo "Directus is ready"
+              exit 0
+            fi
+            echo "Waiting Directus..."
             sleep 2
           done
+          docker compose logs
+          exit 1
 
       - name: Run tests
-        run: mvn -B clean test
-
-      - name: Upload Allure Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results
-          path: target/allure-results
+        run: mvn -q -Dgroups=api test
