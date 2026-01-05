@@ -17,22 +17,47 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: maven
 
-      - name: Start Directus (docker compose)
-        run: docker compose up -d
+      - name: Start Docker Compose
+        run: |
+          docker compose up -d
+          docker ps
 
       - name: Wait for Directus to be ready
         run: |
           for i in {1..60}; do
-            if curl -fsS http://localhost:8055/server/ping | grep -q pong; then
-              echo "Directus is ready"
+            if curl -sSf http://localhost:8055/server/ping > /dev/null; then
+              echo "Directus is up"
               exit 0
             fi
-            echo "Waiting Directus..."
+            echo "Waiting for Directus... ($i/60)"
             sleep 2
           done
-          docker compose logs
+          echo "Directus did not start in time"
+          docker logs qahub-directus || true
+          docker logs qahub-db || true
           exit 1
 
-      - name: Run tests
+      - name: Apply Directus schema snapshot (collections + permissions)
+        run: |
+          if [ ! -f directus-snapshot.yaml ]; then
+            echo "directus-snapshot.yaml not found in repo root"
+            exit 1
+          fi
+
+          docker cp directus-snapshot.yaml qahub-directus:/directus/snapshot.yaml
+          docker exec qahub-directus sh -lc "npx directus schema apply --yes /directus/snapshot.yaml"
+
+      - name: Run API tests
         run: mvn -q -Dgroups=api test
+
+      - name: Show Directus logs on failure
+        if: failure()
+        run: |
+          docker logs qahub-directus || true
+          docker logs qahub-db || true
+
+      - name: Shutdown Docker Compose
+        if: always()
+        run: docker compose down -v
