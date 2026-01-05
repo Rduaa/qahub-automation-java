@@ -21,11 +21,13 @@ jobs:
 
       - name: Start Docker Compose
         run: |
+          set -e
           docker compose up -d
           docker ps
 
       - name: Wait for Directus to be ready
         run: |
+          set -e
           for i in {1..60}; do
             if curl -sSf http://localhost:8055/server/ping > /dev/null; then
               echo "Directus is up"
@@ -41,16 +43,49 @@ jobs:
 
       - name: Apply Directus schema snapshot (collections + permissions)
         run: |
+          set -e
           if [ ! -f directus-snapshot.yaml ]; then
-            echo "directus-snapshot.yaml not found in repo root"
+            echo "directus-snapshot.yaml NOT found in repo root"
+            echo "Create it locally and commit it (snapshot must include permissions)."
             exit 1
           fi
 
           docker cp directus-snapshot.yaml qahub-directus:/directus/snapshot.yaml
+
+          echo "Applying snapshot..."
           docker exec qahub-directus sh -lc "npx directus schema apply --yes /directus/snapshot.yaml"
 
+          echo "Collections after apply (should include tasks):"
+          curl -s http://localhost:8055/collections | head -c 3000 || true
+          echo ""
+
+      - name: Verify API permissions for admin user (must be 200)
+        run: |
+          set -e
+
+          echo "Login to Directus via API..."
+          TOKEN=$(curl -sSf -X POST http://localhost:8055/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@example.com","password":"Admin12345!"}' \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
+
+          echo "Check GET /items/tasks (must be 200)..."
+          STATUS=$(curl -s -o /tmp/out.json -w "%{http_code}" \
+            http://localhost:8055/items/tasks \
+            -H "Authorization: Bearer $TOKEN")
+
+          echo "HTTP_STATUS=$STATUS"
+          cat /tmp/out.json || true
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Permissions are NOT ready in CI (expected 200)."
+            exit 1
+          fi
+
       - name: Run API tests
-        run: mvn -q -Dgroups=api test
+        run: |
+          set -e
+          mvn -q -Dgroups=api test
 
       - name: Show Directus logs on failure
         if: failure()
